@@ -1,0 +1,326 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── 회사 ────────────────────────────────────────────────────────────
+
+model Company {
+  id                 String   @id @default(cuid())
+  name               String
+  businessNumber     String?  @unique @map("business_number")
+  representativeName String?  @map("representative_name")
+  bankName           String?  @map("bank_name")
+  bankAccount        String?  @map("bank_account")
+  bankHolder         String?  @map("bank_holder")
+  fiscalYearStart    Int      @default(1) @map("fiscal_year_start")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  cards             Card[]
+  subsidyPrograms   SubsidyProgram[]
+  budgetCategories  BudgetCategory[]
+  budgetAllocations BudgetAllocation[]
+  revenueEntries    RevenueEntry[]
+  expensePlans      ExpensePlan[]
+  expenseReports    ExpenseReport[]
+  aiAdviceCache     AIAdviceCache[]
+
+  @@map("companies")
+}
+
+// ─── 카드 ────────────────────────────────────────────────────────────
+
+model Card {
+  id               String   @id @default(cuid())
+  companyId        String   @map("company_id")
+  cardName         String   @map("card_name")
+  cardNumberLast4  String   @map("card_number_last4")
+  issuer           String
+  isStartupCard    Boolean  @default(false) @map("is_startup_card")
+  isActive         Boolean  @default(true) @map("is_active")
+  subsidyProgramId String?  @map("subsidy_program_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  company        Company         @relation(fields: [companyId], references: [id])
+  subsidyProgram SubsidyProgram? @relation(fields: [subsidyProgramId], references: [id])
+  transactions   CardTransaction[]
+
+  @@map("cards")
+}
+
+// ─── 카드 거래 내역 ───────────────────────────────────────────────────
+
+model CardTransaction {
+  id                String            @id @default(cuid())
+  cardId            String            @map("card_id")
+  transactionDate   DateTime          @map("transaction_date") @db.Date
+  merchantName      String            @map("merchant_name")
+  merchantCategory  String?           @map("merchant_category")
+  amount            Decimal           @db.Decimal(15, 2)
+  currency          String            @default("KRW")
+  exchangeRate      Decimal?          @db.Decimal(10, 4) @map("exchange_rate")
+  amountKrw         Decimal           @db.Decimal(15, 2) @map("amount_krw")
+  amountExclVat     Decimal?          @db.Decimal(15, 2) @map("amount_excl_vat")
+  vatAmount         Decimal?          @db.Decimal(15, 2) @map("vat_amount")
+  categoryId        String?           @map("category_id")
+  isSubsidyEligible Boolean           @default(false) @map("is_subsidy_eligible")
+  subsidyProgramId  String?           @map("subsidy_program_id")
+  status            TransactionStatus @default(UNCATEGORIZED)
+  description       String?
+  rawData           Json?             @map("raw_data")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+
+  card           Card              @relation(fields: [cardId], references: [id])
+  category       BudgetCategory?   @relation(fields: [categoryId], references: [id])
+  subsidyProgram SubsidyProgram?   @relation(fields: [subsidyProgramId], references: [id])
+  attachments    TransactionAttachment[]
+  subsidyUsages  SubsidyUsage[]
+  expenseReport  ExpenseReport?
+
+  @@map("card_transactions")
+}
+
+enum TransactionStatus {
+  UNCATEGORIZED
+  CATEGORIZED
+  SUBSIDY_LINKED
+  REPORT_GENERATED
+  SUBMITTED
+}
+
+// ─── 첨부파일 ────────────────────────────────────────────────────────
+
+model TransactionAttachment {
+  id            String   @id @default(cuid())
+  transactionId String   @map("transaction_id")
+  fileType      String   @map("file_type")
+  fileName      String   @map("file_name")
+  fileUrl       String   @map("file_url")
+  fileSize      Int?     @map("file_size")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  transaction CardTransaction @relation(fields: [transactionId], references: [id])
+
+  @@map("transaction_attachments")
+}
+
+// ─── 지원사업 프로그램 ────────────────────────────────────────────────
+
+model SubsidyProgram {
+  id            String        @id @default(cuid())
+  companyId     String        @map("company_id")
+  programName   String        @map("program_name")
+  fundingAgency String        @map("funding_agency")
+  totalAmount   Decimal       @db.Decimal(15, 2) @map("total_amount")
+  usedAmount    Decimal       @default(0) @db.Decimal(15, 2) @map("used_amount")
+  startDate     DateTime      @map("start_date") @db.Date
+  endDate       DateTime      @map("end_date") @db.Date
+  status        SubsidyStatus @default(ACTIVE)
+  notes         String?
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  company        Company           @relation(fields: [companyId], references: [id])
+  cards          Card[]
+  transactions   CardTransaction[]
+  subsidyUsages  SubsidyUsage[]
+  expenseReports ExpenseReport[]
+
+  @@map("subsidy_programs")
+}
+
+enum SubsidyStatus {
+  ACTIVE
+  EXHAUSTED
+  EXPIRED
+}
+
+// ─── 지원금 사용 연결 ─────────────────────────────────────────────────
+
+model SubsidyUsage {
+  id               String   @id @default(cuid())
+  subsidyProgramId String   @map("subsidy_program_id")
+  transactionId    String   @map("transaction_id")
+  amountExclVat    Decimal  @db.Decimal(15, 2) @map("amount_excl_vat")
+  vatAmount        Decimal  @db.Decimal(15, 2) @map("vat_amount")
+  kosmeCategory    String?  @map("kosme_category")
+  kosmeSubcategory String?  @map("kosme_subcategory")
+  usageDate        DateTime @map("usage_date") @db.Date
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  subsidyProgram SubsidyProgram  @relation(fields: [subsidyProgramId], references: [id])
+  transaction    CardTransaction @relation(fields: [transactionId], references: [id])
+
+  @@map("subsidy_usages")
+}
+
+// ─── 사업비 사용내역서 ────────────────────────────────────────────────
+
+model ExpenseReport {
+  id               String              @id @default(cuid())
+  companyId        String              @map("company_id")
+  transactionId    String?             @unique @map("transaction_id")
+  subsidyProgramId String?             @map("subsidy_program_id")
+  purchaseDate     DateTime            @map("purchase_date") @db.Date
+  deliveryDate     DateTime            @map("delivery_date") @db.Date
+  productName      String              @map("product_name")
+  purchaseReason   String              @map("purchase_reason")
+  totalExclVat     Decimal             @db.Decimal(15, 2) @map("total_excl_vat")
+  kosmeCategory    String?             @map("kosme_category")
+  kosmeSubcategory String?             @map("kosme_subcategory")
+  canSkipReport    Boolean             @default(false) @map("can_skip_report")
+  status           ExpenseReportStatus @default(DRAFT)
+  pdfUrl           String?             @map("pdf_url")
+  kosmeRequestInfo Json?               @map("kosme_request_info")
+  createdAt        DateTime            @default(now()) @map("created_at")
+  updatedAt        DateTime            @updatedAt @map("updated_at")
+
+  company        Company          @relation(fields: [companyId], references: [id])
+  transaction    CardTransaction? @relation(fields: [transactionId], references: [id])
+  subsidyProgram SubsidyProgram?  @relation(fields: [subsidyProgramId], references: [id])
+  items          ExpenseReportItem[]
+
+  @@map("expense_reports")
+}
+
+enum ExpenseReportStatus {
+  DRAFT
+  READY
+  SUBMITTED
+}
+
+model ExpenseReportItem {
+  id           String  @id @default(cuid())
+  reportId     String  @map("report_id")
+  itemName     String  @map("item_name")
+  unitPrice    Decimal @db.Decimal(15, 2) @map("unit_price")
+  quantity     Int     @default(1)
+  totalExclVat Decimal @db.Decimal(15, 2) @map("total_excl_vat")
+  period       String?
+  note         String?
+  sortOrder    Int     @default(0) @map("sort_order")
+
+  report ExpenseReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@map("expense_report_items")
+}
+
+// ─── 예산 카테고리 ────────────────────────────────────────────────────
+
+model BudgetCategory {
+  id           String   @id @default(cuid())
+  companyId    String?  @map("company_id")
+  name         String
+  code         String?
+  parentId     String?  @map("parent_id")
+  categoryType String   @default("GENERAL") @map("category_type")
+  keywords     String[]
+  mccCodes     String[] @map("mcc_codes")
+  requiredDocs Json?    @map("required_docs")
+  isActive     Boolean  @default(true) @map("is_active")
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  company      Company?         @relation(fields: [companyId], references: [id])
+  parent       BudgetCategory?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children     BudgetCategory[] @relation("CategoryTree")
+  transactions CardTransaction[]
+  allocations  BudgetAllocation[]
+
+  @@map("budget_categories")
+}
+
+// ─── 예산 배정 ────────────────────────────────────────────────────────
+
+model BudgetAllocation {
+  id               String     @id @default(cuid())
+  companyId        String     @map("company_id")
+  categoryId       String     @map("category_id")
+  budgetType       BudgetType @map("budget_type")
+  fiscalYear       Int        @map("fiscal_year")
+  fiscalMonth      Int?       @map("fiscal_month")
+  allocatedAmount  Decimal    @db.Decimal(15, 2) @map("allocated_amount")
+  alertThresholdPct Int       @default(80) @map("alert_threshold_pct")
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
+
+  company  Company        @relation(fields: [companyId], references: [id])
+  category BudgetCategory @relation(fields: [categoryId], references: [id])
+
+  @@unique([companyId, categoryId, budgetType, fiscalYear, fiscalMonth])
+  @@map("budget_allocations")
+}
+
+enum BudgetType {
+  CASH
+  SUBSIDY
+}
+
+// ─── 매출 ────────────────────────────────────────────────────────────
+
+model RevenueEntry {
+  id          String    @id @default(cuid())
+  companyId   String    @map("company_id")
+  entryDate   DateTime  @map("entry_date") @db.Date
+  category    String?
+  amount      Decimal   @db.Decimal(15, 2)
+  entryType   EntryType @map("entry_type")
+  description String?
+  source      String?
+  fiscalYear  Int       @map("fiscal_year")
+  fiscalMonth Int       @map("fiscal_month")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@map("revenue_entries")
+}
+
+// ─── 비용 계획 ────────────────────────────────────────────────────────
+
+model ExpensePlan {
+  id          String    @id @default(cuid())
+  companyId   String    @map("company_id")
+  planDate    DateTime  @map("plan_date") @db.Date
+  categoryId  String?   @map("category_id")
+  amount      Decimal   @db.Decimal(15, 2)
+  planType    EntryType @map("plan_type")
+  description String?
+  fiscalYear  Int       @map("fiscal_year")
+  fiscalMonth Int       @map("fiscal_month")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@map("expense_plans")
+}
+
+enum EntryType {
+  ACTUAL
+  PROJECTED
+}
+
+// ─── AI 조언 캐시 ─────────────────────────────────────────────────────
+
+model AIAdviceCache {
+  id           String   @id @default(cuid())
+  companyId    String   @map("company_id")
+  adviceType   String   @map("advice_type")
+  generatedFor DateTime @map("generated_for") @db.Date
+  content      String
+  modelUsed    String?  @map("model_used")
+  generatedAt  DateTime @default(now()) @map("generated_at")
+  expiresAt    DateTime @map("expires_at")
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@unique([companyId, adviceType, generatedFor])
+  @@map("ai_advice_cache")
+}
