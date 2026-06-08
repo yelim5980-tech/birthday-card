@@ -3,12 +3,13 @@ import { KpiCard } from "@/components/dashboard/KpiCard";
 import { BudgetGauge } from "@/components/dashboard/BudgetGauge";
 import { AlertPanel, type Alert } from "@/components/dashboard/AlertPanel";
 import { AIAdvicePanel } from "@/components/dashboard/AIAdvicePanel";
+import { CashFlowChart } from "@/components/dashboard/CashFlowChart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { formatKrw } from "@/lib/vat";
 
-// TODO: 실제 DB 데이터로 교체
+// TODO: DB 연결 후 실제 데이터로 교체
 const MOCK_DATA = {
   cashFlow: 23_000_000,
   cashFlowTrend: 12,
@@ -39,8 +40,32 @@ const MOCK_ALERTS: Alert[] = [
   },
 ];
 
+const AI_CONTEXT = {
+  cashFlowKrw: MOCK_DATA.cashFlow,
+  revenueActual: MOCK_DATA.revenue.actual,
+  revenueProjected: MOCK_DATA.revenue.projected,
+  expenseActual: MOCK_DATA.expenses.actual,
+  expensePlanned: MOCK_DATA.expenses.projected,
+  subsidyUsed: MOCK_DATA.subsidyBudget.used,
+  subsidyTotal: MOCK_DATA.subsidyBudget.total,
+  subsidyDaysLeft: MOCK_DATA.subsidyBudget.daysLeft,
+  cashBudgetUsedPct: Math.round(
+    (MOCK_DATA.cashBudget.used / MOCK_DATA.cashBudget.total) * 100
+  ),
+  vatSelfPaid: MOCK_DATA.vatSelfPaid,
+};
+
 export default function DashboardPage() {
-  const { cashFlow, cashFlowTrend, revenue, expenses, cashBudget, subsidyBudget, vatSelfPaid, recentTransactions } = MOCK_DATA;
+  const {
+    cashFlow,
+    cashFlowTrend,
+    revenue,
+    expenses,
+    cashBudget,
+    subsidyBudget,
+    vatSelfPaid,
+    recentTransactions,
+  } = MOCK_DATA;
 
   return (
     <div className="flex flex-col">
@@ -79,12 +104,40 @@ export default function DashboardPage() {
           />
         </div>
 
+        {/* 현금흐름 차트 */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-semibold text-gray-700">
+                현금흐름 추이 (2026년)
+              </CardTitle>
+              <div className="flex items-center gap-3 text-xs text-gray-400">
+                <span className="flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-full bg-blue-500" />매출
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-full bg-green-500" />현금흐름
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-full bg-yellow-300" />현금지출
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-full bg-emerald-300" />지원금집행
+                </span>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <CashFlowChart />
+          </CardContent>
+        </Card>
+
         {/* 예산 현황 */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-semibold text-gray-700">
-                💰 현금 예산 현황
+                현금 예산 현황
                 <span className="ml-2 text-xs font-normal text-gray-400">(낮을수록 좋음)</span>
               </CardTitle>
             </CardHeader>
@@ -104,7 +157,7 @@ export default function DashboardPage() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-semibold text-gray-700">
-                🏛️ 지원금 집행 현황
+                지원금 집행 현황
                 <span className="ml-2 text-xs font-normal text-gray-400">(높을수록 좋음)</span>
               </CardTitle>
             </CardHeader>
@@ -170,10 +223,7 @@ export default function DashboardPage() {
           </Card>
 
           <div className="space-y-4">
-            <AIAdvicePanel
-              advice="이번 달 지원금 집행률이 60%입니다. 잔여 12,000,000원을 45일 내 집행하려면 월 약 8,000,000원 페이스가 필요합니다."
-              generatedAt="2026-06"
-            />
+            <AIAdvicePanel context={AI_CONTEXT} generatedAt="2026-06" />
 
             <Card>
               <CardContent className="p-4">
@@ -182,8 +232,13 @@ export default function DashboardPage() {
                   <Button variant="outline" size="sm" className="w-full justify-start gap-2" asChild>
                     <Link href="/cards/import">카드 내역 가져오기</Link>
                   </Button>
-                  <Button variant="outline" size="sm" className="w-full justify-start gap-2 border-green-200 text-green-700 hover:bg-green-50" asChild>
-                    <Link href="/subsidies">사업비 사용내역서 작성</Link>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full justify-start gap-2 border-green-200 text-green-700 hover:bg-green-50"
+                    asChild
+                  >
+                    <Link href="/subsidies/1/docs/new">사업비 사용내역서 작성</Link>
                   </Button>
                 </div>
               </CardContent>
